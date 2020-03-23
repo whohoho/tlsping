@@ -722,3 +722,17 @@ let rec serialize_tls_state ?(sanity=true) (t:Tls.State.state) =
 
 
 (* TODO serialize outgoing/queue *)
+
+let read_file filename =
+    let ch = open_in filename in
+    let s = really_input_string ch (in_channel_length ch) in
+    close_in ch;
+    s
+
+let write_file filename str =
+  let oc = open_out filename in
+  Logs.debug (fun m -> m "wrote debug file");
+output_string oc str ;
+  close_out oc
+
+

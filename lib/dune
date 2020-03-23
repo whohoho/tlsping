@@ -18,8 +18,8 @@
 )
 
 (tests
-  (names test_tlsping)
-  (modules test_tlsping)
+  (names test_tlsping test_bouncer_client_conn_state)
+  (modules test_tlsping test_bouncer_client_conn_state)
   (deps serialized_state.txt)
   (libraries tlsping alcotest)
  (preprocess

@@ -1,8 +1,7 @@
+ open Rresult 
 
-
-open Rresult
-(* open Lwt.Infix *)
 open Lwt
+(* open Lwt.Infix *)
 (* open Shared *)
 
 
@@ -14,13 +13,16 @@ type encrypt_msg_error =
 | TLS_state_error
 
 
-(*
- *
 type serialized_state = string
-type state_get = unit -> (serialized_state, Mirage_kv.error) result Lwt.t
-type state_put =  serialized_state -> (unit, Mirage_kv.write_error) result Lwt.t
-*)
 
+type state_get = unit -> (serialized_state, Mirage_kv.error) Stdlib.result Lwt.t
+type state_put =  serialized_state -> (unit, Mirage_kv.write_error) Stdlib.result Lwt.t
+
+(*
+type state_get = unit -> unit Lwt.t
+
+type state_put =  serialized_state -> (string, error) result Lwt.t
+*)
 (* the state of 1 tls session via a bouncer *)
 type t =
   { mutable tls_state : Tls.Engine.state
@@ -34,15 +36,13 @@ type t =
   ; queue_from_bouncer : string  Ke.Fke.t
   ; channel_to_client : string Stream.t
   ; channel_from_client : string Stream.t
-  (*
   ; state_store_get : state_get
   ; state_store_put : state_put
-  *)
   }
 
 let to_string t =
   "bouncer_client_conn_state with: " ^ t.address 
-(*
+
 let checkpoint_state ~t =
   Logs.info (fun m -> m "TODO checkpointing TLS state of: ");
    (* TODO deserialize and return new state after serializing to disk,
@@ -52,7 +52,7 @@ let checkpoint_state ~t =
    t.state_store_get () >|= function
    | Ok s -> Shared.deserialize_tls_state s
    |  _ -> print_string "state_get failed!!!"; t.tls_state
-*)
+
 
 let encrypt_queue tls_state payloads seq_num_offset =
   let rec encrypt_msg tls_state payloads acc =
