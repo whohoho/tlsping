@@ -2,6 +2,8 @@ open Tlsping
 open Rresult
 open Lwt
 open Lwt.Infix
+open Logger
+
 
 let () =
   Printexc.record_backtrace true
@@ -341,6 +343,7 @@ let handle_irc_client (target:Socks.socks4_request) proxy_details certs
 
     let rec loop ~state needed_len acc =
       Logs.debug (fun m -> m "entering loop - %d" needed_len) ;
+      (* Here is where messages coming in from proxy are read *)
       Lwt_io.read ~count:needed_len proxy_in >>= fun msg ->
       if "" = msg then fatal "handle_irc_client->loop: connection closed TODO"
       else
@@ -439,7 +442,9 @@ let handle_irc_client (target:Socks.socks4_request) proxy_details certs
                                         address = target.address ;
                                         port = target.port ;
                                         unencrypted_outgoing = [] ;
-                                        max_covered_sequence = 0L } ;
+                                        max_covered_sequence = 0L ;
+                                        (* replay_queue = [] *)
+                                        } ;
             Lwt_io.write proxy_out (serialize_outgoing conn_id 0L
                                       Cstruct.(to_string client_hello)
                                    ) >>= fun () ->
@@ -580,9 +585,11 @@ let listener_service (host,port) proxy_and_certs =
   Lwt_unix.close s >>= fun () ->
   (*   let () = listen s 10 in TODO *)
   (*(Lwt.async (handle_client c proxy certs) ;*)
+  (* server is the socks server *)
   let server = Socks_lwt.establish_server (ADDR_INET (host_inet_addr, port ))
       (socks_address_policy proxy_and_certs) in
   server
+
 
 let run_client () listen_host listen_port proxy_host proxy_port
     ca_public_cert client_public_cert client_secret_key =
@@ -656,12 +663,37 @@ let client_secret_key =
       ~doc:"The client secret key file belonging to this client")
 
 let setup_log =
+  let my_pp_header ~pp_h ppf (l, h) = match l with
+    | Logs.App ->
+        begin match h with
+        | None -> ()
+        | Some h -> Fmt.pf ppf "[%a] " Fmt.(styled app_style string) h
+        end
+    | Logs.Error ->
+        pp_h ppf err_style (match h with None -> "ERROR" | Some h -> h)
+    | Logs.Warning ->
+        pp_h ppf warn_style (match h with None -> "WARNING" | Some h -> h)
+    | Logs.Info ->
+        pp_h ppf info_style (match h with None -> "INFO" | Some h -> h)
+    | Logs.Debug ->
+        pp_h ppf debug_style (match h with None -> "DEBUG" | Some h -> h)
+  in
+  let pp_exec_header =
+    let x = match Array.length Sys.argv with
+    | 0 -> Filename.basename Sys.executable_name
+    | n -> Filename.basename Sys.argv.(0)
+  in
+  let pp_h ppf style h = Fmt.pf ppf "testje! %s: [%a] " x Fmt.(styled style string) h in
+  my_pp_header ~pp_h 
+ in
   let _setup_log (style_renderer:Fmt.style_renderer option) level : unit =
     Fmt_tty.setup_std_outputs ?style_renderer () ;
     Logs.set_level level ;
-    Logs.set_reporter (Logs_fmt.reporter ())
+   Logs.set_reporter (Logs_fmt.reporter ~pp_header:pp_exec_header () ) 
+
   in
-  Term.(const _setup_log $ Fmt_cli.style_renderer ()
+
+  Term.(const Logger._setup_log $ Fmt_cli.style_renderer ()
                         $ Logs_cli.level ())
 
 let cmd =
@@ -680,6 +712,8 @@ let cmd =
   Term.info "tls_ping_client" ~version:"0.1.0" ~doc ~man
 
 let () =
+  Logs.err (fun m -> m "test error") ;
+
   (* TODO Lwt_daemon.daemonize + Lwt_daemon.logger *)
   match Term.eval cmd with
   | `Error _ -> exit 1
