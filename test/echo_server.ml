@@ -1,5 +1,39 @@
 open Lwt
 open Ex_common
+open Printexc
+
+let print_call_site str =
+  (* Iterate over inlined frames *)
+  let rec iter_raw_backtrace_slot f slot =
+    f slot;
+    match get_raw_backtrace_next_slot slot with
+    | None -> ()
+    | Some slot' -> iter_raw_backtrace_slot f slot' 
+  in
+
+  (* Iterate over stack frames *)
+  let iter_raw_backtrace f bt =
+    for i = 0 to raw_backtrace_length bt - 1 do
+      iter_raw_backtrace_slot f (get_raw_backtrace_slot bt i)
+    done
+  in
+  let callstack = get_callstack 30 in
+  let parse_loc str = str in 
+  let btstring = parse_loc raw_backtrace_to_string callstack in
+(*  print_string (btstring ^ "\n"); *)
+  iter_raw_backtrace (fun rawslot -> 
+    let slot = convert_raw_backtrace_slot rawslot in
+    match Printexc.Slot.location slot with
+    | None -> ()
+    | Some { filename;	line_number; start_char;	end_char;  } -> 
+      print_string ( filename ^ ":" 
+                     ^ string_of_int line_number ^ " " 
+                     ^ string_of_int start_char ^ ":" 
+                     ^ string_of_int end_char ^ "\n" )
+    ) callstack; 
+  print_string "end \n";
+  flush stdout;
+  ()
 
 let string_of_unix_err err f p =
   Printf.sprintf "Unix_error (%s, %s, %s)"
@@ -63,4 +97,6 @@ let () =
   let port =
     try int_of_string Sys.argv.(1) with _ -> 4466
   in
+  print_string "testje";
+  print_call_site "testje";
   Lwt_main.run (echo_server port)
