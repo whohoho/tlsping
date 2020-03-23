@@ -1,9 +1,18 @@
+(env
+  (dev
+    (flags (:standard -warn-error -A -g ))))
+
+
 (executable
   (name		tls_ping_client)
   (public_name	tls_ping_client)
   (package	tlsping)
   (modules	tls_ping_client)
   (libraries	cmdliner hex socks socks-lwt tlsping)
+ (preprocess
+  (pps ppx_deriving_rpc ppx_sexp_conv lwt_ppx ppx_deriving_yojson))
+
+
 )
 
 (executable
@@ -12,4 +21,11 @@
   (package	tlsping)
   (modules	tls_ping_server)
   (libraries	cmdliner hex tlsping tls)
+
+ (preprocess
+  (pps ppx_deriving_rpc ppx_sexp_conv lwt_ppx ppx_deriving_yojson))
+
+
 )
+
+

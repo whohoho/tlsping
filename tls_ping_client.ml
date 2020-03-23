@@ -8,7 +8,6 @@ open Logger
 let () =
   Printexc.record_backtrace true
 
-
 let run_client () listen_host listen_port proxy_host proxy_port
     ca_public_cert client_public_cert client_secret_key =
   let listen = (listen_host , listen_port) in
