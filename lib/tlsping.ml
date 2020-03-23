@@ -513,6 +513,7 @@ let create_socket host =
     let s = Lwt_unix.socket host_entry.h_addrtype SOCK_STREAM 0 in
     return @@ R.ok (s , host_inet_addr)
 
+(* multiplexer_tls_config *)
 type proxy_tls_config = {
   (* This is used only when connecting to the proxy, NOT the upstream server.
      Both the client and the proxy use this to mutually authenticate each
