@@ -507,11 +507,11 @@ let create_socket host =
   (* TODO handle try gethostbyname with | Not_found *)
   Lwt_unix.gethostbyname host >>= fun host_entry ->
   if [| |] = host_entry.h_addr_list then
-    return @@ R.error ()
+    Lwt.return @@ R.error ()
   else
     let host_inet_addr = host_entry.h_addr_list.(0) in
     let s = Lwt_unix.socket host_entry.h_addrtype SOCK_STREAM 0 in
-    return @@ R.ok (s , host_inet_addr)
+    Lwt.return @@ R.ok (s , host_inet_addr)
 
 (* multiplexer_tls_config *)
 type proxy_tls_config = {
@@ -530,7 +530,7 @@ let proxy_tls_config (ca_public_cert , public_cert , secret_key) =
   X509_lwt.authenticator (`Ca_file ca_public_cert) >>= fun authenticator ->
   X509_lwt.private_of_pems ~cert:public_cert
     ~priv_key:secret_key >>= fun cert ->
-  return {
+  Lwt.return {
     authenticator
   ; ciphers = [`TLS_DHE_RSA_WITH_AES_256_CBC_SHA256]
   ; version = Tls.Core.(TLS_1_2,TLS_1_2)

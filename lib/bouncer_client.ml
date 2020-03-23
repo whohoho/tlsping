@@ -1,4 +1,7 @@
 
+
+let states = Hashtbl.create 5
+
 let connect_proxy (host , port) certs
   : (Lwt_io.input_channel * Lwt_io.output_channel, [> R.msg])Lwt_result.t =
   Tlsping.(proxy_tls_config certs) >>=

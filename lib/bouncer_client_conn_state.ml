@@ -1,11 +1,17 @@
+open Lwt.Infix
+open Rresult
+
+(*
+open Lwt.Infix
+*)
 type encrypt_msg_error =
 | TLS_handshake_not_finished
 | TLS_state_error
 
+type serialized_state = string
 
-
-type state_get = string -> (string, error) result Lwt.t
-type state_put = string -> (unit, write_error) result Lwt.t 
+type state_get = unit -> (serialized_state, Mirage_kv.error) result Lwt.t
+type state_put =  serialized_state -> (unit, Mirage_kv.write_error) result Lwt.t
 
 
 (* the state of 1 tls session via a bouncer *)
@@ -17,10 +23,10 @@ type t =
   ; port              : int
   ; hostname          : string
   ; mutable max_covered_sequence : int64
-  ; queue_to_bouncer : Ke.Rke.t
-  ; queue_from_bouncer : Ke.Rke.t
-  ; channel_to_client : Stream.t
-  ; channel_from_client : Stream.t
+  ; queue_to_bouncer : string Ke.Fke.t
+  ; queue_from_bouncer : string  Ke.Fke.t
+  ; channel_to_client : string Stream.t
+  ; channel_from_client : string Stream.t
   ; state_store_get : state_get
   ; state_store_put : state_put
   }
@@ -29,36 +35,34 @@ let to_string t =
   "bouncer_client_conn_state with: " ^ t.address 
 
 let checkpoint_state ~t =
-  Logs.info (fun m -> m "TODO checkpointing TLS state of: " ^ (to_string t));
+  Logs.info (fun m -> m "TODO checkpointing TLS state of: ");
    (* TODO deserialize and return new state after serializing to disk,
      that way we can do some casual testing that this is actually resumable...*)
    (* FIXME check for error *)
-   let _ = state_store_put (serialize_tls_state t.tls_state) in
-   match state_store_get with
-   | string s -> deserialize_tls_state s
-   | error e -> print_string "state_get failed!!!"; t.tls_state
+   let _ = t.state_store_put (Shared.serialize_tls_state t.tls_state) in
+   t.state_store_get () >|= function
+   | Ok s -> Shared.deserialize_tls_state s
+   |  _ -> print_string "state_get failed!!!"; t.tls_state
     
 
+let rec encrypt_msg payloads acc ~t =
+  (* encrypt a record containing [payload] and MAC'd with the given [seq_num],
+   * using the client keys from [tls_state] *)
+  begin match payloads , t.tls_state.Tls.State.encryptor with
+    | (payload :: payloads) , Some encryptor ->
+      begin match Tls.Engine.send_application_data
+                    t.tls_state [Cstruct.(of_string payload)] with
+      | None -> R.error TLS_state_error
+      | Some (tls_state , encrypted) ->
+        encrypt_msg tls_state payloads
+          ((encryptor.sequence , encrypted, `Plaintext payload) :: acc) ~t
+      end
+    | [] , Some _ -> R.ok (t.tls_state , List.rev acc)
+    | _  , None   -> R.error TLS_state_error
+  end
 
 
 let encrypt_queue () payloads seq_num_offset ~t =
-  let tls_state = t.tls_state in
-  let rec encrypt_msg t.tls_state payloads acc ~t =
-    (* encrypt a record containing [payload] and MAC'd with the given [seq_num],
-     * using the client keys from [tls_state] *)
-    begin match payloads , t.tls_state.Tls.State.encryptor with
-      | (payload :: payloads) , Some encryptor ->
-        begin match Tls.Engine.send_application_data
-                      t.tls_state [Cstruct.(of_string payload)] with
-        | None -> R.error TLS_state_error
-        | Some (t.tls_state , encrypted) ->
-          encrypt_msg t.tls_state payloads
-            ((encryptor.sequence , encrypted, `Plaintext payload) :: acc) ~t
-        end
-      | [] , Some _ -> R.ok (t.tls_state , List.rev acc)
-      | _  , None   -> R.error TLS_state_error
-    end
-  in
   match t.tls_state.Tls.State.encryptor with
   | Some { sequence ; _ } when (sequence > seq_num_offset) ->
     (* the `when` guard makes sure we only encrypt data "ahead" of time *)
@@ -78,7 +82,7 @@ let send_pings_if_needed conn_id proxy_out ~t =
     | Some {sequence; _} -> sequence | None -> -1337L end 
   in
   (* let conn_state = Hashtbl.find states conn_id in (*TODO handle not found*) *)
-  let offset     = int64_max t.max_covered_sequence (get_seq t.tls_state) in
+  let offset     = Shared.int64_max t.max_covered_sequence (get_seq t.tls_state) in
   let next_seq   = Int64.succ @@ get_seq t.tls_state in
   let new_offset =
     let rec lol proposed =
@@ -112,14 +116,20 @@ let send_pings_if_needed conn_id proxy_out ~t =
         m "sending %d pings: amount %Ld max: %Ld offset: %Ld"
           List.(length pings) new_offset t.max_covered_sequence offset
       ) ;
-    begin match encrypt_queue _ pings offset ~t with
+    begin match encrypt_queue () pings offset ~t with
       | Ok (_ , pings) ->
+        (* WTF, FIXME
         Lwt_list.map_s (fun (seq, cout, `Plaintext _) ->
             Logs.debug (fun m -> m "queuing %Ld" seq) ;
-            (return @@ Cstruct.to_string cout)
+            (Lwt.return @@ Cstruct.to_string cout)
           ) pings >>= fun pings ->
-        Lwt_list.iter_s (fun m -> Ke.Rke.push t.queue_to_bouncer m)
-        @@ serialize_queue ~conn_id offset pings
+        Lwt_list.iter_s (fun m -> 
+(*            let _ = Ke.Fke.push t.queue_to_bouncer m in *)
+            Lwt.return_unit
+          ) (Shared.serialize_queue ~conn_id offset pings)
+          >>= fun () ->
+           *)
+        Lwt.return_unit
       | Error _ ->
         Logs.err (fun m -> m "outgoing: TODO error generating PINGs") ;
         Lwt.return_unit
@@ -144,8 +154,8 @@ let handle_resend_ack ~proxy_out ~conn_id ~acked_seq ~next_seq ~t =
             | _ :: tl -> rec_l tl
           in rec_l t.outgoing
         in
-        begin match encrypt_queue t.tls_state [line] next_seq with
-          | Error _ -> return @@ `Fatal
+        begin match encrypt_queue () [line] next_seq ~t with
+          | Error _ -> Lwt.return @@ `Fatal
               (Printf.sprintf "resend, but error re-encrypting \
                                TODO die ns:%Ld" next_seq)
           | Ok (tls_state , msg_list) ->
@@ -153,7 +163,7 @@ let handle_resend_ack ~proxy_out ~conn_id ~acked_seq ~next_seq ~t =
             let msgs = List.map (fun (resent_seq, cout, `Plaintext plaintext) ->
                 Logs.debug (fun m -> m "[%ld] Resending seq %Ld: @[<v>%S@]"
                                conn_id resent_seq plaintext);
-                serialize_outgoing conn_id resent_seq
+                Shared.serialize_outgoing conn_id resent_seq
                 @@ Cstruct.to_string cout)
                 msg_list
             in
@@ -162,8 +172,11 @@ let handle_resend_ack ~proxy_out ~conn_id ~acked_seq ~next_seq ~t =
                                     line) :: t.outgoing ;
 (*            Hashtbl.replace states conn_id conn_state ; *)
 (* FIXME write to queue            Lwt_io.write proxy_out String.(concat "" msgs) *)
-            >>= fun () -> send_pings_if_needed conn_id proxy_out
-            >>= fun () -> return @@ `Established
+             R.ok ( tls_state, msg_list ) 
+            
+
+            >>= fun _ ->  R.ok (send_pings_if_needed conn_id proxy_out ~t)
+            >>= fun _ -> R.ok `Established
         end
       end else
         Lwt.return @@ `Fatal

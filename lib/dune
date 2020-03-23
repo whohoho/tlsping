@@ -3,14 +3,15 @@
   (name tlsping)
   (public_name tlsping)
   (synopsis "TLSPING implementation")
-  (modules tlsping logger)
+  (modules shared logger bouncer_client_conn_state)
   (flags (:standard -safe-string))
   (wrapped false)
   (libraries logs.cli logs.fmt fmt.cli fmt.tty hex lwt.unix
   domain-name
   mirage-crypto
   tls x509 tls.lwt
-             rresult)
+             rresult
+ mirage-kv ke)
  (preprocess
   (pps ppx_deriving_rpc ppx_sexp_conv lwt_ppx ppx_deriving_yojson))
 
