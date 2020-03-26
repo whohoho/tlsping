@@ -1,0 +1,77 @@
+const connMachine = Machine({
+  id: 'fetcadsfasdfh',
+  initial: 'expect_connect',
+  context: {
+    retries: 0
+  },
+  states: {
+    expect_connect: {
+      on: {
+        TCP_DISCONNECT: 'nostate',
+        TCP_CONNECT: 'connecting',
+        SCHEDULE: 'nostate',
+        SUBSCRIBE: 'nostate',
+        UNSUBSCRIBE: 'nostate',
+        MUX_FAILURE: 'expect_connect',
+        
+      }
+    },
+    connecting: {
+      on: {
+        TCP_DISCONNECT: 'disconnecting',
+        TCP_CONNECT: 'connecting',
+        SHEDULE: 'connecting',
+        SUBSCRIBE: 'connecting_subscribed',
+        MUX_FAILURE: 'connecting'
+
+      }
+    },
+    connecting_subscribed: {
+      on: {
+        TCP_DISCONNECT: 'disconnected',
+        TCP_CONNECT: 'connecting_subscribed',
+        SCHEDULE: 'connecting_subscribed',
+        SUBSCRIBE: 'connecting_subscribed',
+        UNSUBSCRIBE: 'connecting',
+        MUX_FAILURE: 'connecting'
+
+      }
+    },
+    connected: {
+      on: {
+        TCP_DISCONNECT: 'disconnecting',
+        TCP_CONNECT: 'connecting',
+        SCHEDULE: 'connecting_subscribed',
+        SUBSCRIBE: 'connecting_subscribed',
+        UNSUBSCRIBE: 'connecting',
+        MUX_FAILURE: 'connected'
+      }
+    },
+    connecting_subscribed: {
+      on: {
+        TCP_DISCONNECT: 'disconnecting',
+        TCP_CONNECT: 'connecting_subscribed',
+        SCHEDULE: 'connecting_subscribed',
+        SUBSCRIBE: 'connecting_subscribed',
+        UNSUBSCRIBE: 'connecting',
+        MUX_FAILURE: 'connected'
+
+      }
+    },
+    disconnecting: {
+      on: {
+        TCP_DISCONNECT: 'disconnecting',
+        TCP_CONNECT: 'disconnecting',
+        SCHEDULE: 'disconnecting',
+        SUBSCRIBE: 'disconnecting',
+        UNSUBSCRIBE: 'disconnecting',
+        MUX_FAILURE: 'disconnecting'
+      }
+    },
+      nostate: {
+        type: 'final'
+      
+    },
+  }
+});
+
