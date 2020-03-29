@@ -2,21 +2,10 @@
   (dev
     (flags (:standard -warn-error -A -g ))))
 
-
 (executable
-  (name		tls_ping_client)
-  (public_name	tls_ping_client)
+  (name		testje)
+  (public_name	testje)
   (package	tlsping)
-  (modules	tls_ping_client)
-  (libraries	cmdliner hex socks socks-lwt tlsping)
+  (modules	testje)
+  (libraries	cmdliner hex socks socks-lwt tlsping unix)
 )
-
-(executable
-  (name		tls_ping_server)
-  (public_name	tls_ping_server)
-  (package	tlsping)
-  (modules	tls_ping_server)
-  (libraries	cmdliner hex tlsping tls)
-)
-
-

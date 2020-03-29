@@ -2,7 +2,7 @@
   (name tlsping)
   (public_name tlsping)
   (synopsis "TLSPING implementation")
-  (modules shared logger bouncer_client_conn_state)
+  (modules shared logger client_state) 
   (flags (:standard -safe-string))
   (wrapped false)
   (libraries 
